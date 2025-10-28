@@ -1,0 +1,533 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gás com Base Quente — Acessível (Fix Grid & Clip)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #ffffff;
+      --fg: #111827;
+      --muted: #4b5563;
+      --card: #f9fafb;
+      --border: #e5e7eb;
+      --accent: #0ea5e9;
+      --accent-strong: #0369a1;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b1220;
+        --fg: #e5e7eb;
+        --muted: #94a3b8;
+        --card: #111827;
+        --border: #374151;
+        --accent: #38bdf8;
+        --accent-strong: #0891b2;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin:0; padding:20px; background: var(--bg); color: var(--fg);
+    }
+    .container {
+      max-width:1200px; margin:0 auto; background: var(--card);
+      border:1px solid var(--border); border-radius:12px; padding:18px;
+    }
+    h1 { margin:0 0 12px 0; font-size: clamp(20px, 3vw, 28px); }
+    .controls {
+      display:flex; flex-wrap:wrap; gap:14px; margin:8px 0 16px;
+      background: var(--bg); border:1px solid var(--border); padding:12px; border-radius:10px;
+    }
+    .control-group { display:flex; flex-direction:column; min-width: 180px; }
+    label { font-weight:600; font-size:13px; margin-bottom:4px; color: var(--muted); }
+    input, select, button {
+      padding:10px 12px; border:1px solid var(--border); border-radius:10px;
+      background: var(--card); color: var(--fg);
+    }
+    button { background: var(--accent); color:#fff; border:1px solid var(--accent-strong); cursor:pointer; font-weight:600; }
+    button.secondary { background: transparent; color: var(--fg); border-color: var(--border); }
+    button:disabled { opacity:.6; cursor:not-allowed; }
+
+    /* GRID 2x2 responsivo com alturas bem comportadas */
+    .charts {
+      display: grid; gap:16px;
+      grid-template-columns: 1fr 1fr;
+      align-items: stretch;
+    }
+    @media (max-width: 900px){
+      .charts { grid-template-columns:1fr; }
+    }
+
+    .chart-wrap {
+      background: var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px;
+      height: min(45vh, 400px);      /* <- altura responsiva e limitada */
+      display: flex; flex-direction: column; gap: 8px;
+      overflow: hidden;              /* <- garante que nada "transborde" do card */
+    }
+    .chart-wrap h3 { margin: 0 0 2px 0; font-size: 14px; color: var(--muted); }
+    .toggles { display:flex; gap:12px; align-items:center; margin:0 0 2px 4px; flex-wrap:wrap; }
+    .toggle-item { display:flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid var(--border); border-radius:8px; background: var(--card); }
+    .swatch { width:12px; height:12px; border-radius:3px; display:inline-block; }
+
+    /* O canvas ocupa o espaço restante do card */
+    .chart-wrap canvas { flex: 1 1 auto; width:100% !important; height:100% !important; }
+
+    .status { margin-top:12px; background: var(--bg); border:1px solid var(--border); border-radius:10px; padding:12px; }
+    .grid-info { display:grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap:8px; margin-top:8px; }
+    .info { background: var(--card); border:1px solid var(--border); border-radius:8px; padding:8px; }
+    .warn { color:#b91c1c; font-weight:700; margin-top:6px; }
+    .caption { font-size:12px; color: var(--muted); margin: 6px 0 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Simulação — Gás em 2D com Base Quente (acessível)</h1>
+
+    <div class="controls">
+      <div class="control-group">
+        <label for="nParticles">Nº de partículas</label>
+        <input id="nParticles" type="number" value="300" min="10" max="2000">
+      </div>
+
+      <div class="control-group">
+        <label for="boxSize">Caixa (m) — L = H</label>
+        <input id="boxSize" type="number" value="0.10" step="0.01" min="0.01">
+      </div>
+
+      <div class="control-group">
+        <label for="tBase">Temperatura da base (K)</label>
+        <input id="tBase" type="number" value="333.15" step="0.1">
+      </div>
+
+      <div class="control-group">
+        <label for="alpha">Alpha (Q = α k_B T)</label>
+        <input id="alpha" type="number" value="0.00001" step="0.000001" min="1e-7">
+      </div>
+
+      <div class="control-group">
+        <label for="dt">Δt (s)</label>
+        <input id="dt" type="number" value="0.00001" step="0.000001" min="1e-7">
+      </div>
+
+      <div class="control-group">
+        <label for="totalTime">Tempo total (s)</label>
+        <input id="totalTime" type="number" value="1.0" step="0.1">
+      </div>
+
+      <div class="control-group">
+        <label for="initSpeed">Veloc. inicial (m/s)</label>
+        <input id="initSpeed" type="number" value="0.10" step="0.01">
+      </div>
+
+      <div class="control-group">
+        <label for="heatingMode">Aquecimento</label>
+        <select id="heatingMode">
+          <option value="isotropic" selected>Isotrópico (escala vx e vy)</option>
+          <option value="normal">Só normal à base (vy)</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="vCap">Limite |v| (m/s)</label>
+        <input id="vCap" type="number" value="1000" step="10" min="10">
+      </div>
+
+      <div class="control-group">
+        <label>&nbsp;</label>
+        <button id="startBtn">Iniciar</button>
+      </div>
+      <div class="control-group">
+        <label>&nbsp;</label>
+        <button id="stopBtn" class="secondary" disabled>Parar</button>
+      </div>
+      <div class="control-group">
+        <label>&nbsp;</label>
+        <button id="resetBtn" class="secondary">Reiniciar</button>
+      </div>
+    </div>
+
+    <div class="status">
+      <div id="statusText">Pronto para iniciar simulação</div>
+      <div class="grid-info">
+        <div class="info">t: <span id="time">0.0000</span> s</div>
+        <div class="info">E total: <span id="Etot">0.00e+0</span> J</div>
+        <div class="info">T média: <span id="Tavg">0.00</span> K</div>
+        <div class="info">|v| CM: <span id="vCM">0.0000</span> m/s</div>
+        <div class="info">Batidas na base: <span id="hits">0</span></div>
+      </div>
+      <div id="warn" class="warn"></div>
+      <div class="caption">Use as caixas nos cards para mostrar/ocultar séries. Os gráficos respeitam o contêiner e fazem clipping.</div>
+    </div>
+
+    <div class="charts">
+      <div class="chart-wrap">
+        <h3>Posição do Centro de Massa</h3>
+        <div class="toggles">
+          <label class="toggle-item">
+            <span class="swatch" style="background:#dc2626"></span>
+            <input type="checkbox" id="toggleXcm" checked> x_CM (horizontal)
+          </label>
+          <label class="toggle-item">
+            <span class="swatch" style="background:#2563eb"></span>
+            <input type="checkbox" id="toggleYcm" checked> y_CM (vertical)
+          </label>
+        </div>
+        <canvas id="posChart"></canvas>
+      </div>
+
+      <div class="chart-wrap">
+        <h3>Velocidade do Centro de Massa</h3>
+        <div class="toggles">
+          <label class="toggle-item">
+            <span class="swatch" style="background:#d97706"></span>
+            <input type="checkbox" id="toggleVmag" checked> |v|_CM (módulo)
+          </label>
+          <label class="toggle-item">
+            <span class="swatch" style="background:#16a34a"></span>
+            <input type="checkbox" id="toggleVx" checked> vx_CM
+          </label>
+          <label class="toggle-item">
+            <span class="swatch" style="background:#a21caf"></span>
+            <input type="checkbox" id="toggleVy" checked> vy_CM
+          </label>
+        </div>
+        <canvas id="velChart"></canvas>
+      </div>
+
+      <div class="chart-wrap">
+        <h3>Temperatura</h3>
+        <canvas id="tempChart"></canvas>
+      </div>
+
+      <div class="chart-wrap">
+        <h3>Energia Total</h3>
+        <canvas id="enerChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+<script>
+// --- Constantes físicas
+const KB   = 1.380649e-23;       // J/K
+const MASS = 4.65e-26;           // kg (N2)
+
+// --- Paleta de alto contraste
+const C = {
+  red:   'rgb(220, 38, 38)',
+  blue:  'rgb(37, 99, 235)',
+  green: 'rgb(22, 163, 74)',
+  amber: 'rgb(217, 119, 6)',
+  fuchsia: 'rgb(162, 28, 175)',
+  cyan:  'rgb(8, 145, 178)'
+};
+
+// --- Estado
+let parts = [];
+let running = false;
+let reqId = null;
+let step = 0;
+let baseHits = 0;
+let history = [];
+const MAXPTS = 6000;
+
+// --- UI
+const el = id => document.getElementById(id);
+const ui = {
+  n  : el('nParticles'),
+  L  : el('boxSize'),
+  T  : el('tBase'),
+  a  : el('alpha'),
+  dt : el('dt'),
+  TT : el('totalTime'),
+  v0 : el('initSpeed'),
+  mode: el('heatingMode'),
+  vcap: el('vCap'),
+  start: el('startBtn'),
+  stop : el('stopBtn'),
+  reset: el('resetBtn'),
+  sTxt: el('statusText'),
+  tTxt: el('time'),
+  eTxt: el('Etot'),
+  TTxt: el('Tavg'),
+  vCT : el('vCM'),
+  hits: el('hits'),
+  warn: el('warn'),
+  toggleX: el('toggleXcm'),
+  toggleY: el('toggleYcm'),
+  tVmag : el('toggleVmag'),
+  tVx   : el('toggleVx'),
+  tVy   : el('toggleVy')
+};
+
+// --- Charts (Chart.js)
+let posChart, velChart, tempChart, enerChart;
+function initCharts(){
+  const mk = (ctx, labelY, ymin=null, ymax=null, extra={}) => new Chart(ctx, {
+    type: 'line',
+    data: { datasets: [] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      parsing: false,
+      normalized: true,
+      clip: true, /* <- impede desenhar fora do canvas */
+      elements: { line: { tension: 0.15, borderWidth: 2 }, point: { radius: 0 } },
+      scales: {
+        x: { type: 'linear', title: { display: true, text: 't (s)' }, grid: { color: 'rgba(148,163,184,0.25)'} },
+        y: { title: { display: true, text: labelY }, min: ymin, max: ymax, grid: { color: 'rgba(148,163,184,0.25)' } }
+      },
+      layout: { padding: { left: 4, right: 4, top: 0, bottom: 0 } },
+      plugins: { legend: { display: true, labels: { boxWidth: 14, boxHeight: 6, usePointStyle: true } } },
+      ...extra
+    }
+  });
+
+  const L = Number(ui.L.value);
+  posChart  = mk(el('posChart').getContext('2d'), 'Posição (m)', 0, L);
+  velChart  = mk(el('velChart').getContext('2d'), 'Velocidade (m/s)');
+  tempChart = mk(el('tempChart').getContext('2d'), 'T (K)', 0, Number(ui.T.value)*3);
+  enerChart = mk(el('enerChart').getContext('2d'), 'E (J)', 0);
+
+  posChart.data.datasets.push(
+    {label:'x_CM (horizontal)', data:[], borderColor:C.red,  backgroundColor:'rgba(220,38,38,0.10)', borderWidth:3},
+    {label:'y_CM (vertical)',   data:[], borderColor:C.blue, backgroundColor:'rgba(37,99,235,0.10)', borderWidth:3}
+  );
+  velChart.data.datasets.push(
+    {label:'|v|_CM', data:[], borderColor:C.amber,  backgroundColor:'rgba(217,119,6,0.10)'},
+    {label:'vx_CM',  data:[], borderColor:C.green,  backgroundColor:'rgba(22,163,74,0.10)'},
+    {label:'vy_CM',  data:[], borderColor:C.fuchsia,backgroundColor:'rgba(162,28,175,0.10)'}
+  );
+  tempChart.data.datasets.push(
+    {label:'T média', data:[], borderColor:C.cyan, backgroundColor:'rgba(8,145,178,0.14)'});
+  enerChart.data.datasets.push(
+    {label:'E total', data:[], borderColor:C.blue, backgroundColor:'rgba(37,99,235,0.12)'});
+}
+
+// --- Toggles de visibilidade
+function applyCMToggles(){
+  const metaX = posChart.getDatasetMeta(0);
+  const metaY = posChart.getDatasetMeta(1);
+  metaX.hidden = !ui.toggleX.checked;
+  metaY.hidden = !ui.toggleY.checked;
+  posChart.update('none');
+}
+function applyVelToggles(){
+  const mV = velChart.getDatasetMeta(0);
+  const mX = velChart.getDatasetMeta(1);
+  const mY = velChart.getDatasetMeta(2);
+  mV.hidden = !ui.tVmag.checked;
+  mX.hidden = !ui.tVx.checked;
+  mY.hidden = !ui.tVy.checked;
+  velChart.update('none');
+}
+
+function resetCharts(){
+  [posChart,velChart,tempChart,enerChart].forEach(ch=>{
+    ch.data.datasets.forEach(ds=>ds.data=[]);
+    ch.update('none');
+  });
+}
+
+// --- Utilidades
+function urand(){ return Math.random(); }
+function urand_range(a,b){ return a + (b-a)*urand(); }
+
+// --- Inicialização de partículas
+function initParticles(){
+  parts = [];
+  baseHits = 0; ui.hits.textContent = '0';
+  const N = Number(ui.n.value);
+  const L = Number(ui.L.value);
+  const v0= Number(ui.v0.value);
+  for(let i=0;i<N;i++){
+    const ang = urand_range(0, 2*Math.PI);
+    parts.push({
+      x: urand_range(0, L),
+      y: urand_range(0, L),
+      vx: v0*Math.cos(ang),
+      vy: v0*Math.sin(ang),
+    });
+  }
+  step = 0; history = [];
+}
+
+// --- Colisões e aquecimento
+function collide(p){
+  const EPS = 1e-12;
+  const L   = Number(ui.L.value);
+  const T   = Number(ui.T.value);
+  const a   = Number(ui.a.value);
+  const mode= ui.mode.value;
+  const Q   = a * KB * T;
+  const vcap= Number(ui.vcap.value);
+
+  // Paredes laterais elásticas
+  if (p.x <= 0){ p.x = EPS; p.vx = Math.abs(p.vx); }
+  else if (p.x >= L){ p.x = L - EPS; p.vx = -Math.abs(p.vx); }
+
+  // Teto elástico
+  if (p.y >= L){ p.y = L - EPS; p.vy = -Math.abs(p.vy); }
+
+  // Base: elástica + calor
+  if (p.y <= 0){
+    p.y = EPS;
+    baseHits++; ui.hits.textContent = String(baseHits);
+
+    const v2 = p.vx*p.vx + p.vy*p.vy;
+    const E  = 0.5 * MASS * v2;
+    const En = Math.max(0, E + Q);
+
+    if (E > 1e-30){
+      const f = Math.sqrt(En / E);
+      if (mode === 'isotropic'){
+        p.vx *= f;
+        p.vy *= f;
+        if (p.vy <= 0) p.vy = -p.vy;
+      } else { // normal
+        const Ex = 0.5 * MASS * (p.vx*p.vx);
+        const Ey = Math.max(0, En - Ex);
+        p.vy = Math.sqrt(2*Ey / MASS);
+      }
+    } else {
+      const vnew = Math.sqrt(2*En / MASS);
+      const ang  = urand_range(-Math.PI/3, Math.PI/3);
+      p.vx = vnew * Math.sin(ang);
+      p.vy = vnew * Math.cos(ang);
+    }
+  }
+
+  // Limite de velocidade
+  const s = Math.hypot(p.vx, p.vy);
+  if (s > vcap){
+    const k = vcap / s;
+    p.vx *= k; p.vy *= k;
+  }
+}
+
+// --- Integração
+function stepPos(p){
+  const dt = Number(ui.dt.value);
+  p.x += p.vx * dt;
+  p.y += p.vy * dt;
+}
+
+// --- Observáveis
+function computeCM(){
+  const N = parts.length;
+  let sx=0, sy=0, svx=0, svy=0, sumv2=0, sumE=0;
+  for (let i=0;i<N;i++){
+    const p = parts[i];
+    sx += p.x; sy += p.y; svx += p.vx; svy += p.vy;
+    const v2 = p.vx*p.vx + p.vy*p.vy;
+    sumv2 += v2;
+    sumE  += 0.5*MASS*v2;
+  }
+  const x = sx/N, y = sy/N, vx = svx/N, vy = svy/N;
+  const T  = (MASS * sumv2) / (2*N*KB); // 2 DoF
+  return { x, y, vx, vy, T, E: sumE };
+}
+
+// --- Atualização dos gráficos/UI
+function pushPoint(t, cm){
+  history.push({t, x:cm.x, y:cm.y, vx:cm.vx, vy:cm.vy, v:Math.hypot(cm.vx,cm.vy), T:cm.T, E:cm.E});
+  if (history.length > MAXPTS) history.shift();
+
+  const toXY = (key) => history.map(d => ({x:d.t, y:d[key]}));
+
+  // CM
+  posChart.data.datasets[0].data = toXY('x');
+  posChart.data.datasets[1].data = toXY('y');
+  applyCMToggles();
+
+  // Vel CM
+  velChart.data.datasets[0].data = toXY('v');
+  velChart.data.datasets[1].data = toXY('vx');
+  velChart.data.datasets[2].data = toXY('vy');
+  applyVelToggles();
+
+  // T e E
+  tempChart.data.datasets[0].data = toXY('T');
+  tempChart.update('none');
+  enerChart.data.datasets[0].data = toXY('E');
+  enerChart.update('none');
+
+  // UI
+  ui.tTxt.textContent = t.toFixed(4);
+  ui.eTxt.textContent = cm.E.toExponential(2);
+  ui.TTxt.textContent = cm.T.toFixed(2);
+  ui.vCT.textContent  = Math.hypot(cm.vx,cm.vy).toFixed(4);
+
+  const Tbase = Number(ui.T.value);
+  ui.warn.textContent = (cm.T > 2*Tbase) ? 'AVISO: T muito alta — reduza α ou aumente vCap' : '';
+}
+
+// --- Loop de simulação
+function loop(){
+  if (!running) return;
+  const dt = Number(ui.dt.value);
+  const TT = Number(ui.TT.value);
+  const subStepsPerFrame = 200;
+  for (let k=0;k<subStepsPerFrame;k++){
+    for (let i=0;i<parts.length;i++) stepPos(parts[i]);
+    for (let i=0;i<parts.length;i++) collide(parts[i]);
+    step++;
+
+    const t = step*dt;
+    if (t > TT){ stop(); ui.sTxt.textContent = 'Simulação concluída'; break; }
+    if (k === subStepsPerFrame-1){
+      const cm = computeCM();
+      pushPoint(t, cm);
+    }
+  }
+  reqId = requestAnimationFrame(loop);
+}
+
+// --- Controles
+function start(){
+  if (running) return;
+  if (parts.length === 0) initParticles();
+  running = true; ui.start.disabled = true; ui.stop.disabled = false;
+  ui.sTxt.textContent = 'Simulação em execução…';
+  reqId = requestAnimationFrame(loop);
+}
+function stop(){
+  running = false; ui.start.disabled = false; ui.stop.disabled = true;
+  if (reqId) cancelAnimationFrame(reqId), reqId = null;
+  ui.sTxt.textContent = 'Simulação parada';
+}
+function resetAll(){
+  stop();
+  initParticles();
+  resetCharts();
+  ui.sTxt.textContent = 'Simulação reiniciada';
+  ui.tTxt.textContent = '0.0000';
+  ui.eTxt.textContent = '0.00e+0';
+  ui.TTxt.textContent = '0.00';
+  ui.vCT.textContent  = '0.0000';
+  ui.warn.textContent = '';
+}
+
+// Eventos
+ui.start.addEventListener('click', start);
+ui.stop .addEventListener('click', stop);
+ui.reset.addEventListener('click', resetAll);
+ui.toggleX.addEventListener('change', applyCMToggles);
+ui.toggleY.addEventListener('change', applyCMToggles);
+ui.tVmag.addEventListener('change', applyVelToggles);
+ui.tVx  .addEventListener('change', applyVelToggles);
+ui.tVy  .addEventListener('change', applyVelToggles);
+
+// Boot
+initCharts();
+applyCMToggles();
+applyVelToggles();
+document.getElementById('statusText').textContent = 'Pronto para iniciar simulação';
+</script>
+</body>
+</html>

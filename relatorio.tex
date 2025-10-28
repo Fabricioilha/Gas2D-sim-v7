@@ -1,0 +1,163 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{physics}
+\usepackage{siunitx}
+\usepackage{setspace}
+\usepackage{booktabs}
+
+\geometry{margin=2.5cm}
+\setstretch{1.3}
+
+\begin{document}
+
+\begin{center}
+\LARGE \textbf{Simulação Numérica de um Gás Ideal 2D com Aquecimento pela Base}\\[0.5cm]
+\large Relatório técnico — Física computacional
+\end{center}
+
+\section*{1. Descrição geral}
+
+Simulação numérica de um gás ideal em um recipiente bidimensional, sem colisões entre partículas e com colisões perfeitamente elásticas nas paredes laterais e no topo. 
+As colisões com a base acrescentam energia às partículas, funcionando como uma \textbf{fonte de energia externa}.
+O objetivo é analisar a evolução térmica e dinâmica do sistema, incluindo o cálculo e o gráfico da posição e velocidade do \textbf{centro de massa} ao longo do tempo.
+
+\section*{2. Fundamentos físicos e matemáticos}
+
+\subsection*{2.1 Velocidade escalar}
+A velocidade escalar (módulo da velocidade vetorial) é dada por:
+\begin{equation}
+    V = \sqrt{V_x^2 + V_y^2}
+\end{equation}
+
+\subsection*{2.2 Energia cinética individual}
+A energia cinética de uma partícula com massa $m$ é:
+\begin{equation}
+    E_c = \frac{1}{2} m (V_x^2 + V_y^2)
+\end{equation}
+
+\subsection*{2.3 Teorema da equipartição de energia}
+O teorema da equipartição estabelece que a energia média por partícula é:
+\begin{equation}
+    \langle E_c \rangle = \frac{f}{2} k_B T
+\end{equation}
+onde:
+\begin{itemize}
+    \item $f$ = número de graus de liberdade,
+    \item $k_B$ = constante de Boltzmann,
+    \item $T$ = temperatura em kelvin.
+\end{itemize}
+
+Para um sistema bidimensional ($f = 2$):
+\begin{equation}
+    \langle E_c \rangle = k_B T
+\end{equation}
+
+\textbf{Importante:} não se pode igualar diretamente $\langle E_c \rangle$ à energia cinética individual $E_c$ de uma partícula, pois $\langle E_c \rangle$ representa a \textbf{média} de muitas partículas. 
+Para relacionar ambas, deve-se tomar o somatório das energias individuais e dividir por $N$, o número total de partículas.
+
+\section*{3. Temperatura efetiva do sistema}
+
+A energia cinética total é:
+\begin{equation}
+    K_{\text{total}} = \sum_{i=1}^{N} \frac{1}{2} m (V_{xi}^2 + V_{yi}^2)
+\end{equation}
+
+Pela equipartição:
+\begin{equation}
+    K_{\text{total}} = \frac{f}{2} N k_B T
+\end{equation}
+
+Isolando a temperatura:
+\begin{equation}
+    \boxed{T_{\text{efetiva}} = \frac{2}{f N k_B} \sum_{i=1}^{N} \frac{1}{2} m (V_{xi}^2 + V_{yi}^2)}
+\end{equation}
+
+\section*{4. Velocidade RMS (Root Mean Square)}
+
+Como as velocidades podem ser positivas ou negativas, a média simples $\langle V \rangle$ pode ser zero, mesmo que todas as partículas estejam se movendo rapidamente. 
+A velocidade RMS mede a intensidade real do movimento:
+\begin{equation}
+    V_{\text{rms}} = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (V_{xi}^2 + V_{yi}^2)}
+\end{equation}
+
+\noindent
+Relação entre $V_{\text{rms}}$ e a temperatura (via equipartição):
+\begin{equation}
+    \frac{1}{2} m \langle V_x^2 + V_y^2 \rangle = k_B T
+\end{equation}
+
+Logo:
+\begin{equation}
+    \boxed{V_{\text{rms}} = \sqrt{\frac{2 k_B T}{m}}}
+\end{equation}
+
+Quanto maior a temperatura, maior o valor médio de $V_{\text{rms}}$, indicando que as partículas estão mais agitadas.
+
+\section*{5. Injeção de energia na base}
+
+A cada colisão com a base, uma partícula recebe energia adicional:
+\begin{equation}
+    Q_{\text{per hit}} = c \, k_B \, T_{\text{base}}
+\end{equation}
+onde:
+\begin{itemize}
+    \item $c$ = parâmetro de eficiência de transferência de energia,
+    \item $k_B$ = constante de Boltzmann,
+    \item $T_{\text{base}}$ = temperatura da base em kelvin.
+\end{itemize}
+
+O \textbf{fator de energia} é calculado como:
+\begin{equation}
+    F = \sqrt{\frac{E_{\text{nova}}}{E_{\text{atual}}}}
+\end{equation}
+Esse fator ajusta o módulo total da velocidade, aumentando proporcionalmente $V_x$ e $V_y$ de forma isotrópica (em ambas as direções).
+
+\section*{6. Movimento das partículas}
+
+O movimento de cada partícula é modelado por um \textbf{Movimento Retilíneo Uniforme (MRU)}, com atualização temporal usando o \textbf{método de Euler}:
+\begin{align}
+    x(t + \Delta t) &= x(t) + V_x(t)\,\Delta t \\
+    y(t + \Delta t) &= y(t) + V_y(t)\,\Delta t
+\end{align}
+
+O método de Euler é um integrador de primeira ordem, simples e eficiente para simulações com pequenos intervalos de tempo ($\Delta t$ pequeno).
+
+\section*{7. Centro de massa do sistema}
+
+O centro de massa representa a posição média ponderada pela massa de todas as partículas. Para $N$ partículas de massas $m_i$ e posições $(x_i, y_i)$:
+\begin{align}
+    x_{CM} &= \frac{\sum_{i=1}^{N} m_i x_i}{\sum_{i=1}^{N} m_i}, &
+    y_{CM} &= \frac{\sum_{i=1}^{N} m_i y_i}{\sum_{i=1}^{N} m_i}
+\end{align}
+
+Se todas as partículas têm a mesma massa $m$, as massas se cancelam:
+\begin{align}
+    x_{CM} &= \frac{1}{N} \sum_{i=1}^{N} x_i, &
+    y_{CM} &= \frac{1}{N} \sum_{i=1}^{N} y_i
+\end{align}
+
+A velocidade do centro de massa é obtida como:
+\begin{align}
+    v_{CM,x} &= \frac{1}{N} \sum_{i=1}^{N} V_{xi}, &
+    v_{CM,y} &= \frac{1}{N} \sum_{i=1}^{N} V_{yi}
+\end{align}
+
+\section*{8. Interpretação física}
+
+\begin{itemize}
+    \item \textbf{Temperatura efetiva:} representa a agitação média das partículas (energia interna do sistema). É uma grandeza escalar.
+    \item \textbf{Centro de massa:} representa a posição média do sistema. É uma grandeza vetorial.
+    \item \textbf{Velocidade do centro de massa:} indica o movimento global do conjunto de partículas. Também é vetorial.
+\end{itemize}
+
+\section*{9. Conclusão}
+
+O sistema descrito realiza uma \textbf{simulação numérica de um gás ideal bidimensional} sob aquecimento pela base, utilizando o \textbf{método de Euler} para integração temporal.  
+A temperatura efetiva do sistema é obtida pela média da energia cinética das partículas, enquanto o centro de massa e sua velocidade descrevem o comportamento global do conjunto.  
+Com o aumento da energia injetada pela base, espera-se observar um crescimento de $T_{\text{efetiva}}$ e uma variação ascendente na coordenada $y_{CM}$, análoga ao efeito de \textbf{convecção térmica}.
+
+\end{document}
